@@ -5,6 +5,8 @@
 #include <vector>
 #include <algorithm>
 #include <cstring>
+#include <string>
+#include <map>
 
 #define U49 unsigned long long
 
@@ -13,12 +15,34 @@
 #define get_bit(bitboard, square) ((bitboard) & (1ULL << (square)))
 #define pop_bit(bitboard, square) ((bitboard) &= ~(1ULL << (square)))
 
+#define encode_move(src, trg, piece, capture, river) \
+ (src) | (trg << 6) | (piece << 12) | (capture << 16) | (river << 17)
+
+#define get_src_move(move) (move & 0x3f)
+#define get_trg_move(move) ((move & 0xfc0) >> 6)
+#define get_piece_move(move) ((move & 0xf000) >> 12)
+//Use below for T or F
+#define get_capture_move(move) (move & 0x10000)
+#define get_river_move(move) (move & 0x20000)
+
+#define copy_board() \
+    U49 bitboards_copy[8], occ_copy[3]; \
+    int side_copy; \
+    memcpy(bitboards_copy, bitboards, sizeof(bitboards)); \
+    memcpy(occ_copy, occupancies, sizeof(occupancies)); \
+    side_copy = side;
+
+#define restore_board() \
+    memcpy(bitboards, bitboards_copy, sizeof(bitboards)); \
+    memcpy(occupancies, occ_copy, sizeof(occupancies)); \
+    side = side_copy;
+
 //FEN EXAMPLES
 #define empty_board "7/7/7/7/7/7/7 w 0"
 #define start_pos "2ele1z/ppppppp/7/7/7/PPPPPPP/2ELE1Z w 1"
 
 //enumerate board
-enum{
+enum coords{
     a7, b7, c7, d7, e7, f7, g7,
     a6, b6, c6, d6, e6, f6, g6,
     a5, b5, c5, d5, e5, f5, g5,
@@ -27,6 +51,15 @@ enum{
     a2, b2, c2, d2, e2, f2, g2,
     a1, b1, c1, d1, e1, f1, g1, no_sq
 };
+
+std::map<std::string, coords> cMap ={
+    {"a7",a7},{"b7",b7},{"c7",c7},{"d7",d7},{"e7",e7},{"f7",f7},{"g7",g7},
+    {"a6",a6},{"b6",b6},{"c6",c6},{"d6",d6},{"e6",e6},{"f6",f6},{"g6",g6},
+    {"a5",a5},{"b5",b5},{"c5",c5},{"d5",d5},{"e5",e5},{"f5",f5},{"g5",g5},
+    {"a4",a4},{"b4",b4},{"c4",c4},{"d4",d4},{"e4",e4},{"f4",f4},{"g4",g4},
+    {"a3",a3},{"b3",b3},{"c3",c3},{"d3",d3},{"e3",e3},{"f3",f3},{"g3",g3},
+    {"a2",a2},{"b2",b2},{"c2",c2},{"d2",d2},{"e2",e2},{"f2",f2},{"g2",g2},
+    {"a1",a1},{"b1",b1},{"c1",c1},{"d1",d1},{"e1",e1},{"f1",f1},{"g1",g1}};
 
 //colours
 enum {white, black, both};
@@ -106,7 +139,8 @@ U49 occupancies[3];
 //side to move
 int side = 0;
 
-
+//turn number
+int turn = 0;
 
 //psuedo rand num state
 unsigned int state = 1804289383;
@@ -208,6 +242,68 @@ void printBoard()
 
     printf("     Side:   %s\n", (!side) ? "white" : "black");
 }
+void encodeFEN()
+{
+    std::string fen = "";
+    int cnt = 0;
+    for(int rank = 0; rank < 7; rank++)
+    {
+        for(int file = 0; file < 7; file++)
+        {
+            int square = rank * 7 + file;
+
+            int piece = -1;
+
+            for(int i = P; i <= z; i++)
+            {
+                if(get_bit(bitboards[i], square))
+                {
+                    piece = i;
+
+                    if(cnt == 0)
+                    {
+                        fen += ascii_pieces[piece];
+                        cnt = -1;
+                    }
+                    else
+                    {
+                        fen += std::to_string(cnt);
+                        fen += ascii_pieces[piece];
+                        cnt = -1;
+                    }
+
+                }
+            }
+            cnt++;
+
+
+        }
+        if(cnt != 0)
+            fen += std::to_string(cnt);
+        if(rank != 6)
+            fen += "/";
+        cnt = 0;
+    }
+
+    fen += " ";
+    (side == white) ? fen += "w" : fen += "b";
+
+    fen += " ";
+    fen += std::to_string(turn);
+
+    std::cout<< fen << std::endl;
+}
+
+int my_str2int(const char *s)
+{
+    int res = 0;
+    while (*s) {
+        res *= 10;
+        res += *s++ - '0';
+    }
+
+    return res;
+}
 
 //DECODE FEN
 void decodeFEN(char *fen)
@@ -266,6 +362,11 @@ void decodeFEN(char *fen)
     fen++;
 
     (*fen == 'w') ? (side = white) : (side = black);
+
+    fen++;
+    fen++;
+
+    turn = my_str2int(fen);
 
     for(int i = P; i <= Z; i++)
     {
@@ -615,10 +716,10 @@ U49 msk_eleph_att(int square)
     // set pieces
     set_bit(bitboard, square);
     //elephant offset moves: 7, 14, 1, 2
-    if(bitboard >> 7) attacks |= (bitboard >> 7);
-    if(bitboard >> 14) attacks |= (bitboard >> 14);
-    if(bitboard << 7) attacks |= (bitboard << 7);
-    if(bitboard << 14) attacks |= (bitboard << 14);
+    if((bitboard >> 7))  attacks |= (bitboard >> 7);
+    if((bitboard >> 14)) attacks |= (bitboard >> 14);
+    if((bitboard << 7)) attacks |= (bitboard << 7);
+    if((bitboard << 14)) attacks |= (bitboard << 14);
     if((bitboard >> 1) & not_g_file) attacks |= (bitboard >> 1);
     if((bitboard >> 2) & not_fg_file) attacks |= (bitboard >> 2);
     if((bitboard << 1) & not_a_file) attacks |= (bitboard << 1);
@@ -733,6 +834,16 @@ U49 str_att_otf(int square, U49 block)
     }
 
     return attacks;
+}
+
+U49 both_att_otf(int square, U49 block)
+{
+    U49 atts;
+
+    atts = diag_att_otf(square, block);
+    atts |= str_att_otf(square, block);
+
+    return atts;
 }
 
 // initialise leaper pieces attacks
@@ -928,6 +1039,47 @@ static inline U49 get_lion_slide_attacks(int square, U49 occupancy)
     return result;
 }
 
+typedef struct
+{
+    int moves[256];
+    int cnt;
+}moves;
+
+static inline void addMove(moves *moveList, int mve)
+{
+    moveList->moves[moveList->cnt] = mve;
+    moveList->cnt++;
+}
+
+void printMove(int mve)
+{
+    printf("%s%s%c" , bit_idx_to_coord[get_src_move(mve)],
+                      bit_idx_to_coord[get_trg_move(mve)]);
+}
+
+void printMoveList(moves* moveList)
+{
+    if(!moveList->cnt)
+    {
+        printf("\n   No move in moves list");
+        return;
+    }
+    printf("\n   move   piece   capture   river\n\n");
+    for(int i = 0; i < moveList->cnt; i++)
+    {
+        int mve = moveList->moves[i];
+
+        printf("   %s%s     %c        %d        %d\n" , bit_idx_to_coord[get_src_move(mve)],
+                      bit_idx_to_coord[get_trg_move(mve)],
+                      ascii_pieces[get_piece_move(mve)],
+                      (get_capture_move(mve) ? 1 : 0),
+                      (get_river_move(mve) ? 1 : 0));
+    }
+
+    printf("\n\n   Total Moves: %d", moveList->cnt);
+
+}
+
 //check if square is under attack
 static inline int sqr_under_attack(int square, int side)
 {
@@ -1013,29 +1165,144 @@ void printAttSqrs(int side)
     printf("\n     a b c d e f g\n\n");
 }
 
-std::vector<std::string> moves;
+std::vector<std::string> moves_vec;
 
 void printVec()
 {
-    sort(moves.begin(), moves.end());
+    sort(moves_vec.begin(), moves_vec.end());
 
-    for(int i = 0; i < moves.size(); i++)
+    for(int i = 0; i < moves_vec.size(); i++)
     {
-        if(i == moves.size() -1)
+        if(i == moves_vec.size() -1)
         {
-            std::cout << moves[i];
+            std::cout << moves_vec[i];
         }
         else
         {
-            std::cout << moves[i] << " ";
+            std::cout << moves_vec[i] << " ";
         }
     }
     printf("\n");
 }
 
-//generates movesets
-static inline void gen_moves()
+enum {all_moves, only_captures};
+
+static inline int makeMove(int mve, int mveFlag)
 {
+    if(mveFlag == all_moves)
+    {
+        U49 river_elim = (occupancies[side] & river);
+        //save board
+        copy_board();
+
+        int src_sqr = get_src_move(mve);
+        int trg_sqr = get_trg_move(mve);
+        int piece = get_piece_move(mve);
+        int capture = get_capture_move(mve);
+        int river = get_river_move(mve);
+
+        if(src_sqr >= 21 && src_sqr <= 27)
+        {
+            if(trg_sqr >= 21 && trg_sqr <= 27)
+            {
+                set_bit(river_elim, trg_sqr);
+            }
+        }
+
+        pop_bit(bitboards[piece], src_sqr);
+        set_bit(bitboards[piece], trg_sqr);
+
+        //capture moves
+        if(get_capture_move(mve))
+        {
+            //get capture piece index
+            int strt_p;
+            int end_p;
+
+            if(side == white)
+            {
+                strt_p = p;
+                end_p = z;
+            }
+            else
+            {
+                strt_p = P;
+                end_p = Z;
+            }
+
+            for(int i = strt_p; i <= end_p; i++)
+            {
+                if(get_bit(bitboards[i], trg_sqr))
+                {
+                    pop_bit(bitboards[i], trg_sqr);
+                    break;
+                }
+            }
+        }
+
+        //Check for river eliminations
+        int strt_p;
+        int end_p;
+
+        if(side == white)
+        {
+            strt_p = P;
+            end_p = Z;
+        }
+        else
+        {
+            strt_p = p;
+            end_p = z;
+        }
+
+        while(river_elim)
+        {
+            int elim_index = get_least_sig_idx(river_elim);
+
+
+            for(int i = strt_p; i <= end_p; i++)
+            {
+                if(get_bit(bitboards[i], elim_index))
+                {
+                    pop_bit(bitboards[i], elim_index);
+                    break;
+                }
+            }
+            pop_bit(river_elim, elim_index);
+        }
+
+        //update OCC boards
+        memset(occupancies, 0ULL, sizeof(occupancies));
+        for(int i = P; i <= Z; i++)
+        {
+            occupancies[white] |= bitboards[i];
+        }
+        for(int i = p; i <= z; i++)
+        {
+            occupancies[black] |= bitboards[i];
+        }
+
+        occupancies[both] |= occupancies[white];
+        occupancies[both] |= occupancies[black];
+    }
+    else
+    {
+        if(get_capture_move(mve))
+        {
+            makeMove(mve, all_moves);
+        }
+        else
+        {
+            return 0;
+        }
+    }
+}
+
+//generates movesets
+static inline void gen_moves(moves *moveList)
+{
+    moveList->cnt = 0;
+
     int src_sqr;
     int trg_sqr;
 
@@ -1044,13 +1311,14 @@ static inline void gen_moves()
 
     std::string str = "";
 
-    for(int i = P; i < z; i++)
+    for(int i = P; i <= z; i++)
     {
         bitboard = bitboards[i];
 
         //moves for colour specific pieces, i.e pawns
         if(side == white)
         {
+            //white pawns
             if(i == P)
             {
                 while(bitboard)
@@ -1066,39 +1334,59 @@ static inline void gen_moves()
                     {
                         str += bit_idx_to_coord[src_sqr];
                         str += bit_idx_to_coord[trg_sqr];
-                        moves.push_back(str);
+                        moves_vec.push_back(str);
                         str = "";
+                        if(trg_sqr >= 21 && trg_sqr <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 0, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 0, 0));
                     }
 
                     if(!(trg_sqr < a7) && !get_bit(occupancies[both], trg_sqr + 1) && ((src_sqr + 1) % 7 != 0))
                     {
                         str += bit_idx_to_coord[src_sqr];
                         str += bit_idx_to_coord[trg_sqr + 1];
-                        moves.push_back(str);
+                        moves_vec.push_back(str);
                         str = "";
+                        if((trg_sqr + 1) >= 21 && (trg_sqr + 1) <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr + 1, i, 0, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr + 1, i, 0, 0));
                     }
                     if(!(trg_sqr < a7) && !get_bit(occupancies[both], trg_sqr - 1) && (src_sqr % 7 != 0))
                     {
                         str += bit_idx_to_coord[src_sqr];
                         str += bit_idx_to_coord[trg_sqr - 1];
-                        moves.push_back(str);
+                        moves_vec.push_back(str);
                         str = "";
+                        if((trg_sqr - 1) >= 21 && (trg_sqr - 1) <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr - 1, i, 0, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr - 1, i, 0, 1));
                     }
                     //single pawn push backwards
                     if((src_sqr <= g5) && !get_bit(occupancies[both], trg_sqr + 14))
                     {
                         str += bit_idx_to_coord[src_sqr];
                         str += bit_idx_to_coord[trg_sqr + 14];
-                        moves.push_back(str);
+                        moves_vec.push_back(str);
                         str = "";
+                        if((trg_sqr + 14) >= 21 && (trg_sqr + 14) <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr + 14, i, 0, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr + 14, i, 0, 1));
                     }
                     //double pawn push backwards
-                    if((src_sqr <= g5) && !get_bit(occupancies[both], trg_sqr + 21))
+                    if((src_sqr <= g5) && !get_bit(occupancies[both], trg_sqr + 21) && !get_bit(occupancies[both], trg_sqr + 14))
                     {
                         str += bit_idx_to_coord[src_sqr];
                         str += bit_idx_to_coord[trg_sqr + 21];
-                        moves.push_back(str);
+                        moves_vec.push_back(str);
                         str = "";
+                        if((trg_sqr + 21) >= 21 && (trg_sqr + 21) <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr + 21, i, 0, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr + 21, i, 0, 0));
                     }
 
                     atts = pawn_att[white][src_sqr] & occupancies[black];
@@ -1109,8 +1397,66 @@ static inline void gen_moves()
 
                         str += bit_idx_to_coord[src_sqr];
                         str += bit_idx_to_coord[trg_sqr];
-                        moves.push_back(str);
+                        moves_vec.push_back(str);
                         str = "";
+                        if(trg_sqr >= 21 && trg_sqr <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 1, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 1, 0));
+
+                        pop_bit(atts, trg_sqr);
+                    }
+
+                    pop_bit(bitboard, src_sqr);
+                }
+            }
+
+            //white lion
+            if(i == L)
+            {
+                while(bitboard)
+                {
+                    src_sqr = get_least_sig_idx(bitboard);
+
+                    atts = lion_att[white][src_sqr] & ~occupancies[white];
+
+                    if(both_att_otf(src_sqr, occupancies[both]) & bitboards[l])
+                    {
+                        //leap attack
+                        U49 lionBoard = bitboards[l];
+
+                        trg_sqr = get_least_sig_idx(lionBoard);
+
+                        str += bit_idx_to_coord[src_sqr];
+                        str += bit_idx_to_coord[trg_sqr];
+                        moves_vec.push_back(str);
+                        str = "";
+                        addMove(moveList, encode_move(src_sqr, trg_sqr, i, 1, 0));
+                    }
+
+                    while(atts)
+                    {
+                        trg_sqr = get_least_sig_idx(atts);
+
+                        if(!get_bit(occupancies[black], trg_sqr))
+                        {
+                            //Quiet moves in here
+                            str += bit_idx_to_coord[src_sqr];
+                            str += bit_idx_to_coord[trg_sqr];
+                            moves_vec.push_back(str);
+                            str = "";
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 0, 0));
+                        }
+                        else
+                        {
+                            //Capture moves in here
+                            str += bit_idx_to_coord[src_sqr];
+                            str += bit_idx_to_coord[trg_sqr];
+                            moves_vec.push_back(str);
+                            str = "";
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 1, 0));
+                        }
+
 
                         pop_bit(atts, trg_sqr);
                     }
@@ -1122,6 +1468,7 @@ static inline void gen_moves()
 
         if(side == black)
         {
+            //black pawns
             if(i == p)
             {
                 while(bitboard)
@@ -1136,38 +1483,59 @@ static inline void gen_moves()
                     {
                         str += bit_idx_to_coord[src_sqr];
                         str += bit_idx_to_coord[trg_sqr];
-                        moves.push_back(str);
+                        moves_vec.push_back(str);
                         str = "";
+                        if((trg_sqr) >= 21 && (trg_sqr) <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 0, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 0, 0));
                     }
                     if(!(trg_sqr > g1) && !get_bit(occupancies[both], trg_sqr - 1) && (src_sqr % 7 != 0))
                     {
                         str += bit_idx_to_coord[src_sqr];
                         str += bit_idx_to_coord[trg_sqr - 1];
-                        moves.push_back(str);
+                        moves_vec.push_back(str);
                         str = "";
+                        if((trg_sqr - 1) >= 21 && (trg_sqr - 1) <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr - 1, i, 0, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr - 1, i, 0, 0));
                     }
                     if(!(trg_sqr > g1) && !get_bit(occupancies[both], trg_sqr + 1) && ((src_sqr + 1) % 7 != 0))
                     {
                         str += bit_idx_to_coord[src_sqr];
                         str += bit_idx_to_coord[trg_sqr + 1];
-                        moves.push_back(str);
+                        moves_vec.push_back(str);
                         str = "";
+                        if((trg_sqr + 1) >= 21 && (trg_sqr + 1) <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr + 1, i, 0, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr + 1, i, 0, 0));
+
                     }
                     //single push back
                     if((src_sqr >= a3) && !get_bit(occupancies[both], trg_sqr - 14))
                     {
                         str += bit_idx_to_coord[src_sqr];
                         str += bit_idx_to_coord[trg_sqr - 14];
-                        moves.push_back(str);
+                        moves_vec.push_back(str);
                         str = "";
+                        if((trg_sqr - 14) >= 21 && (trg_sqr - 14) <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr - 14, i, 0, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr - 14, i, 0, 0));
                     }
                     //double pawn push backwards
-                    if((src_sqr >= a3) && !get_bit(occupancies[both], trg_sqr - 21))
+                    if((src_sqr >= a3) && !get_bit(occupancies[both], trg_sqr - 21) && !get_bit(occupancies[both], trg_sqr - 14))
                     {
                         str += bit_idx_to_coord[src_sqr];
                         str += bit_idx_to_coord[trg_sqr - 21];
-                        moves.push_back(str);
+                        moves_vec.push_back(str);
                         str = "";
+                        if((trg_sqr - 21) >= 21 && (trg_sqr - 21) <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr - 21, i, 0, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr - 21, i, 0, 0));
                     }
 
                     atts = pawn_att[black][src_sqr] & occupancies[white];
@@ -1178,8 +1546,12 @@ static inline void gen_moves()
 
                         str += bit_idx_to_coord[src_sqr];
                         str += bit_idx_to_coord[trg_sqr];
-                        moves.push_back(str);
+                        moves_vec.push_back(str);
                         str = "";
+                        if((trg_sqr) >= 21 && (trg_sqr) <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 1, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 1, 0));
 
                         pop_bit(atts, trg_sqr);
                     }
@@ -1188,12 +1560,193 @@ static inline void gen_moves()
 
                 }
             }
+
+            //black lion
+            if(i == l)
+            {
+                while(bitboard)
+                {
+                    src_sqr = get_least_sig_idx(bitboard);
+
+                    atts = lion_att[black][src_sqr] & ~occupancies[black];
+
+                    if(both_att_otf(src_sqr, occupancies[both]) & bitboards[L])
+                    {
+                        //leap attack
+                        U49 lionBoard = bitboards[L];
+
+                        trg_sqr = get_least_sig_idx(lionBoard);
+
+                        str += bit_idx_to_coord[src_sqr];
+                        str += bit_idx_to_coord[trg_sqr];
+                        moves_vec.push_back(str);
+                        str = "";
+                        addMove(moveList, encode_move(src_sqr, trg_sqr, i, 1, 0));
+                    }
+
+                    while(atts)
+                    {
+                        trg_sqr = get_least_sig_idx(atts);
+
+                            if(!get_bit(occupancies[white], trg_sqr))
+                            {
+                                //Quiet moves in here
+                                str += bit_idx_to_coord[src_sqr];
+                                str += bit_idx_to_coord[trg_sqr];
+                                moves_vec.push_back(str);
+                                str = "";
+                                addMove(moveList, encode_move(src_sqr, trg_sqr, i, 0, 0));
+                            }
+                            else
+                            {
+                                //Capture moves in here
+                                str += bit_idx_to_coord[src_sqr];
+                                str += bit_idx_to_coord[trg_sqr];
+                                moves_vec.push_back(str);
+                                str = "";
+                                addMove(moveList, encode_move(src_sqr, trg_sqr, i, 1, 0));
+                            }
+
+                        pop_bit(atts, trg_sqr);
+                    }
+
+                    pop_bit(bitboard, src_sqr);
+                }
+            }
+        }
+
+        //non-colour specific pieces
+    //zebras
+    if((side == white) ? i == Z : i == z)
+    {
+        while(bitboard)
+        {
+            src_sqr = get_least_sig_idx(bitboard);
+
+            atts = zebra_att[src_sqr] & ((side == white) ? ~occupancies[white] : ~occupancies[black]);
+
+            while(atts)
+            {
+                trg_sqr = get_least_sig_idx(atts);
+
+                if(!get_bit(((side == white) ? occupancies[black] : occupancies[white]), trg_sqr))
+                {
+                    //Quite moves in here
+                    str += bit_idx_to_coord[src_sqr];
+                    str += bit_idx_to_coord[trg_sqr];
+                    moves_vec.push_back(str);
+                    str = "";
+                    if((trg_sqr) >= 21 && (trg_sqr) <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 0, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 0, 0));
+                }
+                else
+                {
+                    //Captures in here
+                    str += bit_idx_to_coord[src_sqr];
+                    str += bit_idx_to_coord[trg_sqr];
+                    moves_vec.push_back(str);
+                    str = "";
+                    if((trg_sqr) >= 21 && (trg_sqr) <= 27)
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 1, 1));
+                        else
+                            addMove(moveList, encode_move(src_sqr, trg_sqr, i, 1, 0));
+                }
+
+                pop_bit(atts, trg_sqr);
+            }
+
+            pop_bit(bitboard, src_sqr);
         }
     }
 
-        //non-colour specific pieces
+    //Elephants
+    if((side == white) ? i == E : i == e)
+    {
+        while(bitboard)
+        {
+            src_sqr = get_least_sig_idx(bitboard);
 
+            atts = eleph_att[src_sqr] & ((side == white) ? ~occupancies[white] : ~occupancies[black]);
 
+            while(atts)
+            {
+                if(get_least_sig_idx(atts) > 48)
+                {
+                    trg_sqr = get_least_sig_idx(atts);
+                    pop_bit(atts, trg_sqr);
+                    continue;
+                }
+
+                trg_sqr = get_least_sig_idx(atts);
+
+                if(!get_bit(((side == white) ? occupancies[black] : occupancies[white]), trg_sqr))
+                {
+                    //Quite moves in here
+                    str += bit_idx_to_coord[src_sqr];
+                    str += bit_idx_to_coord[trg_sqr];
+                    moves_vec.push_back(str);
+                    str = "";
+                    if((trg_sqr) >= 21 && (trg_sqr) <= 27)
+                        addMove(moveList, encode_move(src_sqr, trg_sqr, i, 0, 1));
+                    else
+                        addMove(moveList, encode_move(src_sqr, trg_sqr, i, 0, 0));
+                }
+                else
+                {
+                    //Captures in here
+                    str += bit_idx_to_coord[src_sqr];
+                    str += bit_idx_to_coord[trg_sqr];
+                    moves_vec.push_back(str);
+                    str = "";
+                    if((trg_sqr) >= 21 && (trg_sqr) <= 27)
+                        addMove(moveList, encode_move(src_sqr, trg_sqr, i, 1, 1));
+                    else
+                        addMove(moveList, encode_move(src_sqr, trg_sqr, i, 1, 0));
+                }
+
+                pop_bit(atts, trg_sqr);
+            }
+
+            pop_bit(bitboard, src_sqr);
+        }
+    }
+    }
+}
+
+int parseMove(char* moveStr)
+{
+    moves moveList[1];
+    gen_moves(moveList);
+
+    int src_sqr = (moveStr[0] - 'a') + (7 - (moveStr[1] - '0')) * 7;
+    int trg_sqr = (moveStr[2] - 'a') + (7 - (moveStr[3] - '0')) * 7;
+
+    for(int i = 0;i < moveList->cnt; i++)
+    {
+        int mve = moveList->moves[i];
+
+        if(src_sqr == get_src_move(mve) && trg_sqr == get_trg_move(mve))
+        {
+            return mve;
+        }
+    }
+    return 0;
+}
+
+void parsePos(char* comm)
+{
+    char *curr_char = comm;
+
+    if(strncmp(comm, "startpos", 8) == 0)
+    {
+        decodeFEN(start_pos);
+    }
+    else
+    {
+        decodeFEN(comm);
+    }
 }
 
 void init_all()
@@ -1209,9 +1762,12 @@ int main()
     init_all();
 
     int numFens = 0;
+    int src_sqr = 0;
+    int trg_sqr = 0;
     std::string fen;
     std::string tmp;
     std::vector<std::string> fens;
+    std::vector<std::string> mve;
 
     std::cin >> numFens;
 
@@ -1225,7 +1781,10 @@ int main()
         std::cin >> tmp;
         fen += " " + tmp;
         fens.push_back(fen);
+        std::cin >> tmp;
+        mve.push_back(tmp);
     }
+
 
     for(int i = 0; i < fens.size(); i++)
     {
@@ -1233,21 +1792,97 @@ int main()
 
         strcpy(fen_arr, fens[i].c_str());
         decodeFEN(fen_arr);
-        gen_moves();
-        printVec();
-        moves.clear();
+        moves moveList[1];
+        gen_moves(moveList);
+
+        char *fen_mve = new char[mve[i].length() + 1];
+        strcpy(fen_mve, mve[i].c_str());
+        int move = parseMove(fen_mve);
+
+        if(move)
+        {
+            makeMove(move, all_moves);
+
+
+
+            if(side == black)
+                turn++;
+            (side == white) ? (side = black) : (side = white);
+
+            encodeFEN();
+
+            int i = 0;
+            (side == white) ? i = L : i = l;
+            if(get_least_sig_idx(bitboards[i]) == -1)
+            {
+                (side == white) ? std::cout << "Black wins" << std::endl : std::cout << "White wins" << std::endl;
+            }
+            else
+            {
+                std::cout << "Continue" << std::endl;
+            }
+        }
+        else
+        {
+            printf("illegal move");
+        }
+
+        //parsePos("startpos");
+
+        moves_vec.clear();
     }
 
-    //decodeFEN("6E/3pl1p/ezZ4/E6/2L4/3p3/7 b 45");
+    decodeFEN("2ele2/2P2P1/7/PPEp2Z/7/PPP1PPP/2ELE1Z w 4");
+    /*printBoard();
+
+    moves moveList[1];
+    gen_moves(moveList);*/
+
+    //printMoveList(moveList);
+
+    /*for(int i = 0; i < moveList->cnt; i++)
+    {
+        int move = moveList->moves[i];
+
+        copy_board();
+
+        makeMove(move, all_moves);
+        printBoard();
+        getchar();
+
+        restore_board();
+        printBoard();
+        getchar();
+    }*/
+
+    /*printBoard();
+
+    copy_board();
+
+    decodeFEN(empty_board);
+    printBoard();
+
+    restore_board();
+
+    printBoard();
+
+    moves moveList[1];
+
+    gen_moves(moveList);
+
+    printMoveList(moveList);
+
+    printBitBoard(bitboards[p]); */
+
+
+    //decodeFEN("7/7/4l2/7/4L2/7/7 b 45");c3a6
     //decodeFEN("3l3/p6/7/7/1Z1P1p1/3L3/1p5 b 42");
+
+
 
     //printBoard();
 
-    //printAttSqrs(black);
-
-
-
-
+    //printAttSqrs(white);
 
     //printAttSqrs(black);
     //printAttSqrs(white);
@@ -1280,7 +1915,7 @@ int main()
 
     for(int i = 0; i < 7; i++)
     {
-        if(i == 3)
+        if(i == 6)
         {
             for(int j = 0; j < 7; j++)
             {
@@ -1376,3 +2011,4 @@ int main()
 
     return 0;
 }
+
